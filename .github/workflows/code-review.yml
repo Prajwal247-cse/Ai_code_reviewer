@@ -1,0 +1,53 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ai-review:
+    name: 🤖 AI Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+
+      - name: Start AI Code Reviewer backend
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LLM_PROVIDER: anthropic
+        run: |
+          cd backend
+          uvicorn main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -s http://localhost:8000/api/v1/health | python3 -m json.tool
+
+      - name: Run PR Review Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEWER_API_URL: http://localhost:8000
+          MAX_FILES: "15"
+        run: |
+          python cli/github_bot.py
+
+      - name: Upload review report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-report
+          path: pr_review_report.json

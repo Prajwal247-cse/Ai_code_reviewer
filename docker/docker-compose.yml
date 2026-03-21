@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
+    container_name: ai-code-reviewer-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gemini-1.5-flash}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.2}
+      - MAX_CODE_LENGTH=${MAX_CODE_LENGTH:-50000}
+      - DEBUG=${DEBUG:-false}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: nginx:alpine
+    container_name: ai-code-reviewer-ui
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+
+networks:
+  default:
+    name: ai-reviewer-network

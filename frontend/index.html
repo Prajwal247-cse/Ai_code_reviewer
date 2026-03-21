@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Code Reviewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0c10;
+      --surface: #0f1117;
+      --panel: #13161e;
+      --border: #1e2330;
+      --border-glow: #2a3050;
+      --text: #c9d1e0;
+      --text-dim: #5a6480;
+      --text-bright: #eef2ff;
+      --accent: #5b8dee;
+      --accent-glow: rgba(91,141,238,0.15);
+      --green: #3dd68c;
+      --red: #f05c5c;
+      --orange: #f0914a;
+      --yellow: #f0c84a;
+      --cyan: #3dd6d6;
+      --purple: #a78bfa;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-display: 'Syne', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(91,141,238,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91,141,238,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      background: rgba(10,12,16,0.9);
+      backdrop-filter: blur(12px);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      box-shadow: 0 0 20px rgba(91,141,238,0.4);
+    }
+    .logo-text {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -0.02em;
+    }
+    .logo-badge {
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      background: var(--accent-glow);
+      border: 1px solid var(--accent);
+      border-radius: 100px;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+    header nav {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .nav-link {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .nav-link:hover {
+      color: var(--text);
+      border-color: var(--border);
+      background: var(--panel);
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    main {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 65px);
+    }
+
+    /* ── Left panel ──────────────────────────────────────────────────────── */
+    .left-panel {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface);
+    }
+    .panel-header-title {
+      font-family: var(--font-display);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .panel-header-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    /* Language selector */
+    .lang-select {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .lang-select:focus { border-color: var(--accent); }
+
+    /* Code editor area */
+    .code-editor-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #codeInput {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.7;
+      padding: 1.25rem 1.25rem 1.25rem 3.5rem;
+      border: none;
+      outline: none;
+      resize: none;
+      tab-size: 2;
+    }
+    .line-numbers {
+      position: absolute;
+      top: 0; left: 0;
+      width: 3rem;
+      height: 100%;
+      padding: 1.25rem 0.5rem;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      line-height: 1.7;
+      text-align: right;
+      overflow: hidden;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* Action bar */
+    .action-bar {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.5rem 1.25rem;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7c6ff7);
+      color: white;
+      box-shadow: 0 0 20px rgba(91,141,238,0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 30px rgba(91,141,238,0.5);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      color: var(--text);
+      border-color: var(--border-glow);
+      background: var(--panel);
+    }
+    .char-count {
+      margin-left: auto;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Right panel ─────────────────────────────────────────────────────── */
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Score bar */
+    .score-bar {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .score-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .score-value {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .score-label {
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .verdict-text {
+      font-size: 0.8rem;
+      color: var(--text);
+      flex: 1;
+      line-height: 1.4;
+    }
+    .badge-row {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border-radius: 100px;
+      font-weight: 500;
+    }
+    .badge-critical { background: rgba(240,92,92,0.15); color: var(--red); border: 1px solid rgba(240,92,92,0.3); }
+    .badge-high     { background: rgba(240,145,74,0.15); color: var(--orange); border: 1px solid rgba(240,145,74,0.3); }
+    .badge-medium   { background: rgba(240,200,74,0.15); color: var(--yellow); border: 1px solid rgba(240,200,74,0.3); }
+    .badge-low      { background: rgba(61,214,214,0.15); color: var(--cyan); border: 1px solid rgba(61,214,214,0.3); }
+
+    /* Issues list */
+    .issues-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .issues-scroll::-webkit-scrollbar { width: 5px; }
+    .issues-scroll::-webkit-scrollbar-track { background: transparent; }
+    .issues-scroll::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 10px; }
+
+    /* Empty / loading state */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 3rem;
+      color: var(--text-dim);
+    }
+    .empty-icon { font-size: 3rem; opacity: 0.3; }
+    .empty-title {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+    .empty-sub { font-size: 0.75rem; text-align: center; line-height: 1.6; max-width: 280px; }
+
+    /* Loading spinner */
+    .loader {
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+      flex: 1; justify-content: center;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { font-size: 0.75rem; color: var(--text-dim); }
+    .loader-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+      100% { content: ''; }
+    }
+
+    /* Issue card */
+    .issue-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+      cursor: pointer;
+    }
+    .issue-card:hover {
+      border-color: var(--border-glow);
+      transform: translateX(2px);
+    }
+    .issue-card.expanded { border-color: var(--accent); }
+    .issue-card-header {
+      padding: 0.7rem 1rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+    .sev-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .sev-critical { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .sev-high     { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+    .sev-medium   { background: var(--yellow); }
+    .sev-low      { background: var(--cyan); }
+    .sev-info     { background: var(--text-dim); }
+
+    .issue-main { flex: 1; min-width: 0; }
+    .issue-message {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-bright);
+      line-height: 1.35;
+    }
+    .issue-meta {
+      margin-top: 0.2rem;
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    .meta-tag {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .issue-expand-icon {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+      margin-top: 2px;
+    }
+    .issue-card.expanded .issue-expand-icon { transform: rotate(180deg); }
+
+    .issue-body {
+      display: none;
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+    .issue-card.expanded .issue-body { display: block; }
+
+    .issue-section { margin-top: 0.65rem; }
+    .issue-section-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+    .issue-section-text {
+      font-size: 0.73rem;
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .code-snippet {
+      margin-top: 0.4rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.7rem 0.85rem;
+      font-size: 0.72rem;
+      color: var(--green);
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .conf-bar {
+      margin-top: 0.5rem;
+      height: 3px;
+      background: var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .conf-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--purple));
+      border-radius: 10px;
+      transition: width 0.6s ease;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .tab {
+      padding: 0.6rem 1.25rem;
+      font-size: 0.73rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+    .tab-content.active { display: flex; }
+
+    /* Refactor panel */
+    .refactor-wrap {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    #refactoredOutput {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.7;
+      padding: 1.25rem;
+      border: none;
+      outline: none;
+      resize: none;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    /* API config */
+    .api-config {
+      padding: 0.5rem 1.5rem;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.68rem;
+      color: var(--text-dim);
+    }
+    .api-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      outline: none;
+      width: 200px;
+      transition: border-color 0.2s;
+    }
+    .api-input:focus { border-color: var(--accent); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--panel);
+      border: 1px solid var(--border-glow);
+      color: var(--text);
+      font-size: 0.75rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Sample code */
+    .sample-btn {
+      font-size: 0.65rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 5px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      transition: all 0.2s;
+    }
+    .sample-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; height: auto; }
+      .left-panel { height: 50vh; }
+      .right-panel { height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🤖</div>
+    <span class="logo-text">AI Code Reviewer</span>
+    <span class="logo-badge">v1.0</span>
+  </div>
+  <nav>
+    <a class="nav-link" href="http://localhost:8000/docs" target="_blank">API Docs</a>
+    <a class="nav-link" href="http://localhost:8000/api/v1/health" target="_blank">Health</a>
+    <a class="nav-link" href="https://github.com" target="_blank">GitHub</a>
+  </nav>
+</header>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Left: Code Input -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <span class="panel-title" style="font-size:0.75rem;color:var(--text-dim);">📝 SOURCE CODE</span>
+      <div class="panel-header-actions">
+        <button class="sample-btn" onclick="loadSample('python')">Python</button>
+        <button class="sample-btn" onclick="loadSample('javascript')">JS</button>
+        <button class="sample-btn" onclick="loadSample('java')">Java</button>
+        <select class="lang-select" id="langSelect">
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="typescript">TypeScript</option>
+          <option value="java">Java</option>
+          <option value="go">Go</option>
+          <option value="rust">Rust</option>
+          <option value="cpp">C++</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="code-editor-wrap">
+      <div class="line-numbers" id="lineNumbers">1</div>
+      <textarea id="codeInput" spellcheck="false" placeholder="// Paste your code here and click Review…
+// Supports: Python, JavaScript, TypeScript, Java, Go, Rust, C++
+
+def process_user_data(data, cache=[]):
+    password = 'admin123'
+    result = eval(data)
+    cache.append(result)
+    return cache
+" oninput="updateLineNumbers(); updateCharCount();"></textarea>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-primary" id="reviewBtn" onclick="reviewCode()">
+        <span>▶</span> Review Code
+      </button>
+      <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.7rem;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="includeRefactor" checked style="accent-color:var(--accent);"> Refactor
+      </label>
+      <span class="char-count" id="charCount">0 chars</span>
+    </div>
+  </div>
+
+  <!-- Right: Results -->
+  <div class="right-panel">
+
+    <!-- Score bar -->
+    <div class="score-bar" id="scoreBar" style="display:none;">
+      <div class="score-display">
+        <div class="score-value" id="scoreValue">—</div>
+        <div class="score-label">Quality</div>
+      </div>
+      <div style="flex:1;">
+        <div class="verdict-text" id="verdictText"></div>
+        <div class="badge-row" id="badgeRow" style="margin-top:0.5rem;"></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" id="tabsBar" style="display:none;">
+      <div class="tab active" onclick="switchTab('issues')">Issues <span id="issueTabCount" style="font-size:0.65rem;opacity:0.7;"></span></div>
+      <div class="tab" onclick="switchTab('refactor')">Refactored</div>
+      <div class="tab" onclick="switchTab('json')">JSON</div>
+    </div>
+
+    <!-- Issues tab -->
+    <div class="tab-content active" id="tab-issues">
+      <div class="issues-scroll" id="issuesList">
+        <!-- Empty state -->
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">Ready to Review</div>
+          <div class="empty-sub">Paste source code in the left panel, select a language, and click Review Code.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Refactor tab -->
+    <div class="tab-content" id="tab-refactor">
+      <div class="refactor-wrap">
+        <textarea id="refactoredOutput" readonly placeholder="// Refactored code will appear here after review..."></textarea>
+      </div>
+    </div>
+
+    <!-- JSON tab -->
+    <div class="tab-content" id="tab-json">
+      <div class="refactor-wrap">
+        <textarea id="jsonOutput" readonly style="color:var(--cyan);font-family:var(--font-mono);font-size:0.72rem;width:100%;height:100%;background:var(--bg);border:none;outline:none;resize:none;padding:1.25rem;line-height:1.6;" placeholder="// Raw JSON response..."></textarea>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- API config bar -->
+<div class="api-config">
+  <span>API:</span>
+  <input class="api-input" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000" />
+  <span id="apiStatus" style="color:var(--text-dim);">●</span>
+  <span style="margin-left:auto;">Built with FastAPI + Claude Sonnet</span>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let lastResult = null;
+
+// ── Line numbers ──────────────────────────────────────────────────────────
+function updateLineNumbers() {
+  const code = document.getElementById('codeInput').value;
+  const lines = code.split('\n').length;
+  document.getElementById('lineNumbers').textContent =
+    Array.from({length: lines}, (_, i) => i + 1).join('\n');
+}
+function updateCharCount() {
+  const len = document.getElementById('codeInput').value.length;
+  document.getElementById('charCount').textContent = `${len.toLocaleString()} chars`;
+}
+updateLineNumbers();
+updateCharCount();
+
+// ── Tab key in textarea ──────────────────────────────────────────────────
+document.getElementById('codeInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const ta = e.target;
+    const start = ta.selectionStart;
+    ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = start + 2;
+    updateLineNumbers();
+  }
+});
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['issues', 'refactor', 'json'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(tc => {
+    tc.classList.toggle('active', tc.id === `tab-${name}`);
+  });
+}
+
+// ── Review ─────────────────────────────────────────────────────────────────
+async function reviewCode() {
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) { showToast('⚠️ Please paste some code first'); return; }
+
+  const lang = document.getElementById('langSelect').value;
+  const apiBase = document.getElementById('apiUrl').value.trim();
+  const includeRefactor = document.getElementById('includeRefactor').checked;
+
+  const btn = document.getElementById('reviewBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;"></span> Analyzing…';
+
+  showLoading();
+
+  try {
+    const res = await fetch(`${apiBase}/api/v1/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, language: lang, include_refactor: includeRefactor }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    lastResult = await res.json();
+    renderResults(lastResult);
+    document.getElementById('apiStatus').style.color = 'var(--green)';
+  } catch (err) {
+    showError(err.message);
+    document.getElementById('apiStatus').style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>▶</span> Review Code';
+  }
+}
+
+function showLoading() {
+  document.getElementById('scoreBar').style.display = 'none';
+  document.getElementById('tabsBar').style.display = 'none';
+  document.getElementById('tab-issues').classList.add('active');
+  document.getElementById('tab-refactor').classList.remove('active');
+  document.getElementById('tab-json').classList.remove('active');
+  document.getElementById('issuesList').innerHTML = `
+    <div class="loader">
+      <div class="spinner"></div>
+      <div class="loader-text">Analyzing code<span class="loader-dots"></span></div>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin-top:0.25rem;">Running static analysis + AI review</div>
+    </div>`;
+}
+
+function renderResults(data) {
+  const summary = data.summary || {};
+  const issues = data.issues || [];
+
+  // Score bar
+  const scoreBar = document.getElementById('scoreBar');
+  scoreBar.style.display = 'flex';
+  const score = Math.round(summary.overall_score ?? 0);
+  document.getElementById('scoreValue').textContent = score;
+  document.getElementById('scoreValue').style.background =
+    score >= 80 ? 'linear-gradient(135deg,#3dd68c,#3dd6d6)' :
+    score >= 60 ? 'linear-gradient(135deg,#f0c84a,#f0914a)' :
+    'linear-gradient(135deg,#f05c5c,#f0914a)';
+  document.getElementById('scoreValue').style.webkitBackgroundClip = 'text';
+  document.getElementById('scoreValue').style.webkitTextFillColor = 'transparent';
+  document.getElementById('verdictText').textContent = summary.verdict || '';
+
+  // Badges
+  const badgeRow = document.getElementById('badgeRow');
+  badgeRow.innerHTML = '';
+  const counts = [
+    ['critical', summary.critical_count, '🔴'],
+    ['high', summary.high_count, '🟠'],
+    ['medium', summary.medium_count, '🟡'],
+    ['low', summary.low_count, '🔵'],
+  ];
+  counts.forEach(([sev, cnt, ico]) => {
+    if (cnt > 0) {
+      const b = document.createElement('span');
+      b.className = `badge badge-${sev}`;
+      b.textContent = `${ico} ${cnt} ${sev}`;
+      badgeRow.appendChild(b);
+    }
+  });
+
+  // Tabs
+  document.getElementById('tabsBar').style.display = 'flex';
+  document.getElementById('issueTabCount').textContent = `(${issues.length})`;
+
+  // Issues
+  const list = document.getElementById('issuesList');
+  if (issues.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">✅</div>
+      <div class="empty-title">No Issues Found</div>
+      <div class="empty-sub">Excellent code! The AI found nothing to flag.</div>
+    </div>`;
+  } else {
+    list.innerHTML = '';
+    issues.forEach((issue, idx) => renderIssueCard(issue, idx, list));
+  }
+
+  // Refactored code
+  document.getElementById('refactoredOutput').value = data.refactored_code || '// No refactored code available.';
+
+  // JSON
+  document.getElementById('jsonOutput').value = JSON.stringify(data, null, 2);
+
+  showToast(`✅ Review complete — ${issues.length} issue(s) found`);
+}
+
+function renderIssueCard(issue, idx, container) {
+  const card = document.createElement('div');
+  card.className = 'issue-card';
+  const conf = Math.round((issue.confidence || 0) * 100);
+  const lineInfo = issue.line ? `L${issue.line}${issue.line_end && issue.line_end !== issue.line ? `–${issue.line_end}` : ''}` : 'Global';
+  const typeIcon = {bug:'🐛',security:'🔐',performance:'⚡',code_smell:'🤢',best_practice:'📘',naming:'🏷️',complexity:'🌀',duplicate:'🔁',memory:'💾',style:'✏️'}[issue.type] || '•';
+
+  card.innerHTML = `
+    <div class="issue-card-header" onclick="toggleCard(this.parentElement)">
+      <div class="sev-dot sev-${issue.severity}"></div>
+      <div class="issue-main">
+        <div class="issue-message">${escHtml(issue.message)}</div>
+        <div class="issue-meta">
+          <span class="meta-tag">${typeIcon} ${issue.type}</span>
+          <span class="meta-tag">📍 ${lineInfo}</span>
+          <span class="meta-tag">⚡ ${conf}% confidence</span>
+          ${issue.rule_id ? `<span class="meta-tag">🏷 ${issue.rule_id}</span>` : ''}
+        </div>
+      </div>
+      <span class="issue-expand-icon">▾</span>
+    </div>
+    <div class="issue-body">
+      <div class="issue-section">
+        <div class="issue-section-label">Why this matters</div>
+        <div class="issue-section-text">${escHtml(issue.explanation)}</div>
+      </div>
+      <div class="issue-section">
+        <div class="issue-section-label">Suggestion</div>
+        <div class="issue-section-text">${escHtml(issue.suggestion)}</div>
+      </div>
+      ${issue.fixed_code ? `
+      <div class="issue-section">
+        <div class="issue-section-label">Improved Code</div>
+        <div class="code-snippet">${escHtml(issue.fixed_code)}</div>
+      </div>` : ''}
+      <div class="issue-section" style="margin-top:0.75rem;">
+        <div class="issue-section-label" style="display:flex;justify-content:space-between;">
+          <span>Confidence</span><span>${conf}%</span>
+        </div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${conf}%"></div></div>
+      </div>
+      ${issue.references?.length ? `
+      <div class="issue-section">
+        <div class="issue-section-label">References</div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
+          ${issue.references.slice(0,3).map(r => `<a href="${r}" target="_blank" style="font-size:0.65rem;color:var(--accent);text-decoration:none;">${r.length > 50 ? r.substring(0,50)+'…' : r}</a>`).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
+  container.appendChild(card);
+}
+
+function toggleCard(card) {
+  card.classList.toggle('expanded');
+}
+
+function showError(msg) {
+  document.getElementById('issuesList').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">❌</div>
+      <div class="empty-title">Review Failed</div>
+      <div class="empty-sub">${escHtml(msg)}<br><br>Make sure the backend is running at the configured API URL.</div>
+    </div>`;
+  showToast(`❌ ${msg}`);
+}
+
+function clearAll() {
+  document.getElementById('codeInput').value = '';
+  document.getElementById('issuesList').innerHTML = `<div class="empty-state">
+    <div class="empty-icon">🔍</div>
+    <div class="empty-title">Ready to Review</div>
+    <div class="empty-sub">Paste source code in the left panel, select a language, and click Review Code.</div>
+  </div>`;
+  document.getElementById('scoreBar').style.display = 'none';
+  document.getElementById('tabsBar').style.display = 'none';
+  document.getElementById('refactoredOutput').value = '';
+  document.getElementById('jsonOutput').value = '';
+  updateLineNumbers();
+  updateCharCount();
+  switchTab('issues');
+}
+
+// ── Sample code snippets ──────────────────────────────────────────────────
+const SAMPLES = {
+  python: `import os
+
+def authenticate_user(username, password, users=[]):
+    # TODO: add rate limiting
+    stored_pw = "admin123"
+    query = f"SELECT * FROM users WHERE name='{username}'"
+    
+    try:
+        result = eval(query)
+        if password == stored_pw:
+            users.append(username)
+            return True
+    except:
+        pass
+    return False
+
+def fetch_data(url):
+    import urllib
+    data = urllib.request.urlopen(url).read()
+    return data`,
+
+  javascript: `var apiKey = "sk-1234567890abcdef";
+
+function getUser(userId) {
+    var query = "SELECT * FROM users WHERE id = " + userId;
+    return eval(query);
+}
+
+function renderContent(userInput) {
+    document.getElementById('output').innerHTML = userInput;
+    console.log("rendered:", userInput);
+}
+
+function fetchData(url) {
+    fetch(url)
+        .then(r => r.json())
+        .then(data => renderContent(data.html));
+}`,
+
+  java: `import java.sql.*;
+
+public class UserService {
+    private static String DB_PASS = "supersecret";
+
+    public User findUser(String name) {
+        try {
+            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost/db", "root", DB_PASS);
+            String query = "SELECT * FROM users WHERE name = '" + name + "'";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(query);
+            return parseUser(rs);
+        } catch (Exception e) {
+            // silently ignore
+        }
+        return null;
+    }
+
+    public void processAll(List<String> items) {
+        String result = "";
+        for (String item : items) {
+            result += item + ",";  // String concat in loop
+            System.out.println("Processing: " + item);
+        }
+    }
+}`,
+};
+
+function loadSample(lang) {
+  document.getElementById('langSelect').value = lang;
+  document.getElementById('codeInput').value = SAMPLES[lang] || '';
+  updateLineNumbers();
+  updateCharCount();
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Check API health on load ───────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${document.getElementById('apiUrl').value}/api/v1/health`, { signal: AbortSignal.timeout(3000) });
+    document.getElementById('apiStatus').style.color = r.ok ? 'var(--green)' : 'var(--red)';
+    document.getElementById('apiStatus').title = r.ok ? 'API online' : 'API error';
+  } catch {
+    document.getElementById('apiStatus').style.color = 'var(--orange)';
+    document.getElementById('apiStatus').title = 'API unreachable';
+  }
+}
+checkHealth();
+
+// Ctrl+Enter to review
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') reviewCode();
+});
+</script>
+</body>
+</html>

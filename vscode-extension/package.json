@@ -1,0 +1,50 @@
+{
+  "name": "ai-code-reviewer",
+  "displayName": "AI Code Reviewer",
+  "description": "Real-time AI-powered code review: bugs, security, performance, and best practices.",
+  "version": "1.0.0",
+  "publisher": "your-publisher-id",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Other"],
+  "activationEvents": ["onLanguage:python", "onLanguage:javascript", "onLanguage:typescript", "onLanguage:java", "onLanguage:go"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiReviewer.reviewFile",
+        "title": "AI Code Reviewer: Review Current File"
+      },
+      {
+        "command": "aiReviewer.reviewSelection",
+        "title": "AI Code Reviewer: Review Selected Code"
+      }
+    ],
+    "configuration": {
+      "title": "AI Code Reviewer",
+      "properties": {
+        "aiReviewer.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "URL of the AI Code Reviewer backend API"
+        },
+        "aiReviewer.autoReviewOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically review on file save"
+        },
+        "aiReviewer.minSeverity": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"],
+          "default": "medium",
+          "description": "Minimum severity level to highlight"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        { "command": "aiReviewer.reviewFile", "group": "navigation" },
+        { "command": "aiReviewer.reviewSelection", "group": "navigation", "when": "editorHasSelection" }
+      ]
+    }
+  }
+}
